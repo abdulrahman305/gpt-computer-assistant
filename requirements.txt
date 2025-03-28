@@ -142,7 +142,7 @@ greenlet==3.0.3
     # via sqlalchemy
 groq==0.8.0
     # via langchain-groq
-grpcio==1.64.1
+grpcio==1.64.3
     # via
     #   google-api-core
     #   grpcio-status
@@ -211,7 +211,7 @@ langchain-community==0.0.38
     # via
     #   -r requirements.in
     #   langchain
-langchain-core==0.1.52
+langchain-core==0.1.53
     # via
     #   -r requirements.in
     #   langchain
@@ -243,7 +243,7 @@ langsmith==0.1.76
     #   langchain
     #   langchain-community
     #   langchain-core
-litellm==1.40.8
+litellm==1.61.15
     # via open-interpreter
 markdown-it-py==3.0.0
     # via rich
