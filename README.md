@@ -1,328 +1,213 @@
-<p align="center">
-  <a href="#">
-    <img src="https://github.com/user-attachments/assets/df1a3ec1-8c03-43c8-9432-c71358c35b9e" >
-  </a>
-  <br>
+<img src="https://github.com/user-attachments/assets/10a3a9ca-1f39-410c-ac48-a7365de589d9" >
+<br>
+<br>
+<a name="readme-top"></a>
 
-<p align="center">
+<div align="center">
 
-  <a href="https://docs.gca.dev">
-    <img src="https://github.com/user-attachments/assets/c60562bf-540e-47d9-b578-994285071128" width="250">
-  </a>
 
-</p>
+</div>
 
-  <p align="center">
-    <a href="https://www.producthunt.com/posts/gpt-computer-assistant?embed=true&utm_source=badge-top-post-badge&utm_medium=badge&utm_souce=badge-gpt&#0045;computer&#0045;assistant" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/top-post-badge.svg?post_id=465468&theme=dark&period=daily" alt="GPT&#0032;Computer&#0032;Assistant - Create&#0032;intelligence&#0032;for&#0032;your&#0032;products | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
-    .
-    <a href="https://discord.gg/qApFmWMt8x"><img alt="Static Badge" src="https://img.shields.io/badge/Discord-Join?style=social&logo=discord" width=150></a>
-    .
-    <a href="https://x.com/GPTCompAsst"><img alt="Static Badge" src="https://img.shields.io/badge/X_App-Join?style=social&logo=x" width=150></a>
+
+  <p>
+    <a href="https://discord.gg/dNKGm4dfnR">
+    <img src="https://img.shields.io/badge/Discord-Join-7289DA?logo=discord&logoColor=white">
+    </a>
+    <a href="https://twitter.com/upsonicai">
+    <img src="https://img.shields.io/twitter/follow/upsonicai?style=social">
+    </a>
+    <a href="https://trendshift.io/repositories/10584" target="_blank"><img src="https://trendshift.io/api/badge/repositories/10584" alt="unclecode%2Fcrawl4ai | Trendshift" style="width: 100px; height: 20px;"     
+    <a href="https://www.python.org/">
+    <img src="https://img.shields.io/badge/Made%20with-Python-1f425f.svg" alt="Made_with_python">
+    </a>
   </p>
 
 
-  <p align="center">
-    <br />
-    Intelligence development framework
-    <br />
-    </p>
-    <br>
-
-  <p align="center">
-  <a href="https://www.python.org/">
-  <img src="https://img.shields.io/badge/Made%20with-Python-1f425f.svg" alt="Made_with_python">
-  </a>
-  .
-  <img src="https://static.pepy.tech/personalized-badge/gpt-computer-assistant?period=total&units=international_system&left_color=grey&right_color=blue&left_text=PyPI%20Downloads" alt="pypi_downloads">
-  </p>
+# Introduction
+Upsonic is a reliability-focused framework designed for real-world applications. It enables trusted agent workflows in your organization through advanced reliability features, including verification layers, triangular architecture, validator agents, and output evaluation systems.
 
 
+# 🛠️ Getting Started
 
+### Prerequisites
 
-|ENGLISH|[简体中文](README.zh_CN.md)|[正體中文](README.zh_TW.md)|[TÜRKÇE](README.TR.md)
+- Python 3.10 or higher
+- Access to OpenAI or Anthropic API keys (Azure and Bedrock Supported)
 
-# GPT Computer Assistant(GCA)
-Hi, this is an alternative work for providing ChatGPT MacOS app to Windows and Linux. In this way this is a fresh and stable work. You can easily install as Python library for this time but we will prepare a pipeline for providing native install scripts (.exe).
+## Installation
 
-Powered by <a href="https://github.com/Upsonic/Tiger"><strong>Upsonic Tiger 🐅</strong></a> A function hub for llm agents.
+```bash
+pip install upsonic
+
+```
 
 
 
+# Basic Example
 
-## 1. Install and run
-**Python 3.10 or 3.11 is required**
+Set your OPENAI_API_KEY
 
 ```console
-pip install 'gpt-computer-assistant[base]'
-pip install 'gpt-computer-assistant[api]'
+export OPENAI_API_KEY=sk-***
 ```
 
-To run gpt-computer-assistant, simply type
-
-```console
-computerassistant --api
-```
-
-
-<p align="center">
-
-  <a href="#">
-    <img src="https://github.com/user-attachments/assets/890b4e0a-4484-4870-a158-2d365b0d969e" >
-  </a>
-
-</p>
-
-
-
-
-<p align="center">
-<br>
-  <br>
-  <br>
-  <br>
-  <br>
-</p>
-
-
-
-
-
-
-## 2. LLM Settings
+Start the agent 
 
 ```python
-from gpt_computer_assistant.remote import remote
+from upsonic import Task, Agent
 
-remote.save_models("gpt-4o")
-remote.save_openai_api_key("sk-**")
+task = Task("Who developed you?")
+
+agent = Agent(name="Coder")
+
+agent.print_do(task)
 ```
 
-<p align="start">
-
-  <a href="https://docs.upsonic.co/gca/dev_guides/llm_settings">
-    <img src="https://github.com/user-attachments/assets/a75c8ddf-f9df-436b-9dc8-c5220211e15e" width="150">
-  </a>
-
-</p>
-
-
-
-<p align="center">
 <br>
-  <br>
-  <br>
-</p>
+<br>
+
+# Why Choose Upsonic?
+Upsonic is a next-generation framework that makes agents production-ready by solving three critical challenges:
+
+1- **Reliability**: While other frameworks require expertise and complex coding for reliability features, Upsonic offers easy-to-activate reliability layers without disrupting functionality.
+
+2- **Model Context Protocol (MCP)**: The MCP allows you to leverage tools with various functionalities developed both officially and by third parties without requiring you to build custom tools from scratch.
+
+3- **Integrated Browser Use and Computer Use**: Directly use and deploy agents that works on non-API systems.
+
+4- **Secure Runtime**: Isolated environment to run agents
+
+![sdk-server](https://github.com/user-attachments/assets/1b276199-ae60-4221-b8e6-b266443a3641)
+
+<br>
+
+## 📊 Reliability Layer
+
+LLM output reliability is critical, particularly for numerical operations and action execution. Upsonic addresses this through a multi-layered reliability system, enabling control agents and verification rounds to ensure output accuracy.
+
+**Verifier Agent**: Validates outputs, tasks, and formats - detecting inconsistencies, numerical errors, and hallucinations
+
+**Editor Agent**: Works with verifier feedback to revise and refine outputs until they meet quality standards
+
+**Rounds**: Implements iterative quality improvement through scored verification cycles
+
+**Loops**: Ensures accuracy through controlled feedback loops at critical reliability checkpoints
 
 
+Upsonic is a reliability-focused framework. The results in the table were generated with a small dataset. They show success rates in the transformation of JSON keys. No hard-coded changes were made to the frameworks during testing; only the existing features of each framework were activated and run. GPT-4o was used in the tests.
 
-## 3. Characteristic API
+10 transfers were performed for each section. The numbers show the error count. So if it says 7, it means 7 out of 10 were done **incorrectly**. The table has been created based on initial results. We are expanding the dataset. The tests will become more reliable after creating a larger test set. Reliability benchmark [repo](https://github.com/Upsonic/Reliability-Benchmark)
 
 
 ```python
-# Name of the assitant:
-remote.change_name("X Intelligence")
+class ReliabilityLayer:
+  prevent_hallucination = 10
 
-#Developer personna of the assistant:
-remote.change_developer("X Company")
+agent = Agent(name="Coder", reliability_layer=ReliabilityLayer, model="openai/gpt4o")
 ```
 
-<p align="start">
-
-  <a href="https://docs.upsonic.co/gca/dev_guides/characteristic">
-    <img src="https://github.com/user-attachments/assets/d7e02ac6-e40c-4b35-8e65-4621bf3fb9a1" width="150">
-  </a>
-
-</p>
-
-
-
-<p align="center">
 <br>
-  <br>
-  <br>
-</p>
+
+
+**Key features:**
+
+- **Production-Ready Scalability**: Deploy seamlessly on AWS, GCP, or locally using Docker.
+- **Task-Centric Design**: Focus on practical task execution, with options for:
+    - Basic tasks via LLM calls.
+    - Advanced tasks with V1 agents.
+    - Complex automation using V2 agents with MCP integration.
+- **MCP Server Support**: Utilize multi-client processing for high-performance tasks.
+- **Tool-Calling Server**: Exception-secure tool management with robust server API interactions.
+- **Computer Use Integration**: Execute human-like tasks using Anthropic’s ‘Computer Use’ capabilities.
+- **Easily adding tools:** You can add your custom tools and MCP tools with a single line of code.
+<br>
+
+# 📙 Documentation
+
+You can access our documentation at [docs.upsonic.ai](https://docs.upsonic.ai/) All concepts and examples are available there.
+
+<br>
 
 
 
-## 4. Connect Your Functions API
 
+
+## Tool Integration via MCP
+
+Upsonic officially supports [Model Context Protocol (MCP)](https://github.com/modelcontextprotocol/servers) and custom tools. You can use hundreds of MCP servers at [glama](https://glama.ai/mcp/servers) or [mcprun](https://mcp.run) We also support Python functions inside a class as a tool. You can easily generate your integrations with that.
 
 ```python
-# Installing an library:
-remote.install_library("numpy")
+from upsonic import Agent, Task
+from pydantic import BaseModel
 
+# Define Fetch MCP configuration
+class FetchMCP:
+    command = "uvx"
+    args = ["mcp-server-fetch"]
 
+# Create response format for web content
+class WebContent(BaseModel):
+    title: str
+    content: str
+    summary: str
+    word_count: int
 
-# Adding functianility as python functions:
-@remote.custom_tool
-def my_server_status() -> bool:
-  """
-  Check the server status.
-  """
-  return True
+# Initialize agent
+web_agent = Agent(
+    name="Web Content Analyzer",
+    model="openai/gpt-4o",  # You can use other models
+)
+
+# Create a task to analyze a web page
+task = Task(
+    description="Fetch and analyze the content from url. Extract the main content, title, and create a brief summary.",
+    context=["https://upsonic.ai"],
+    tools=[FetchMCP],
+    response_format=WebContent
+)
+    
+# Usage
+result = web_agent.print_do(task)
+print(result.title)
+print(result.summary)
+
 ```
-
-
-
-<p align="center">
 <br>
-  <br>
-  <br>
-</p>
 
 
 
-## 5. Interact with User API
+## Direct LLM Call
 
-
-### remote.input
-
-Talk with assistant, about user and computer. With this api you can create an consulting process.
-
-```markdown
-`Hi, look to user window and return which app using now`
-
-`Ask user to is user need any kind of supoprt`
-
-`Extract the user redis config file.`
-```
-
-With this questions you will make a shortcut for your needs. 
-**You can collect informations from user computer or directly from user or user computer.**
+Direct LLM calls offer faster, cheaper solutions for simple tasks. In Upsonic, you can make calls to model providers without any abstraction level and organize structured outputs. You can also use tools with LLM calls.
 
 ```python
-output = remote.input("Extract the user redis config file.", screen=False)
-print(output)
+from upsonic import Task, Direct
+
+direct = Direct(model="openai/gpt-4o")
+
+task = Task("Where can I use agents in real life?")
+
+direct.print_do(task)
+
 ```
 
-
-<p align="start">
-
-  <a href="https://docs.upsonic.co/gca/dev_guides/interact">
-    <img src="https://github.com/user-attachments/assets/81614347-ab85-4965-9b77-225d0f2961e9" width="150">
-  </a>
-  .
-  <a href="https://docs.upsonic.co/gca/dev_guides/interact">
-    <img src="https://github.com/user-attachments/assets/ecaa7590-f4c5-4eda-9482-462cef54aeff" width="150">
-  </a>
-  .
-  <a href="https://docs.upsonic.co/gca/dev_guides/interact">
-    <img src="https://github.com/user-attachments/assets/0f35df10-b32e-4fa1-936e-b336be46b1bd" width="150">
-  </a>
-
-</p>
-
-
-
-<p align="start">
-
-  <a href="https://docs.upsonic.co/gca/dev_guides/interact">
-    <img src="https://github.com/user-attachments/assets/a893c50c-3ede-4b42-90ee-92e2fea82120" width="150">
-  </a>
-
-</p>
-
-
-<p align="center">
 <br>
-  <br>
-  <br>
-</p>
 
+## Cookbook
+You can [check out many examples](https://github.com/Upsonic/cookbook) showing how to build agents using MCP tools and browser use with Upsonic.
 
-## Usage
-![options](https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/37d34745-ae4b-4b37-9bfa-aec070c97897)
+<br>
 
+## Telemetry
 
+We use anonymous telemetry to collect usage data. We do this to focus our developments on more accurate points. You can disable it by setting the UPSONIC_TELEMETRY environment variable to false.
 
-### Use cases
-
-
-<img alt="Screenshot 2024-08-13 at 18 33 52" src="https://github.com/user-attachments/assets/8f994160-893a-4f56-bbf0-4a7aa87af650">
-
-
-
-
-## Roadmap
-| Feature                         | Status       | Target Release |
-|---------------------------------|--------------|----------------|
-| Clear Chat History         | Completed    | Q2 2024        |
-| Long Audios Support (Split 20mb)      | Completed    | Q2 2024        |
-| Text Inputs               | Completed      | Q2 2024        |
-| Just Text Mode (Mute Speech)           | Completed  | Q2 2024        |
-| Added profiles (Different Chats)          | Completed    | Q2 2024        |
-| More Feedback About Assistant Status                  | Completed    | Q2 2024        |
-| Local Model Vision and Text (With Ollama, and vision models)  | Completed  | Q2 2024        |
-| **Our Customizable Agent Infrastructure**              | Completed      | Q2 2024        |
-| Supporting Groq Models  | Completed  | Q2 2024        |
-| **Adding Custom Tools**  | Completed  | Q2 2024        |
-| Click on something on the screen (text and icon)              | Completed      | Q2 2024        |
-| New UI              | Completed      | Q2 2024        |
-| Native Applications, exe, dmg              | Completed     | Q3 2024        |
-| **Collaborated Speaking Different Voice Models on long responses.**              | Completed     | Q2 2024        |
-| **Auto Stop Recording, when you complate talking**              | Completed     | Q2 2024        |
-| **Wakeup Word**              | Completed     | Q2 2024        |
-| **Continuously Conversations**              | Completed     | Q2 2024        |
-| **Adding more capability on device**              | Completed     | Q2 2024        |
-| **Local TTS**              | Completed     | Q3 2024        |
-| **Local STT**              | Completed     | Q3 2024        |
-| Tray Menu              | Completed     | Q3 2024        |
-| **Global Hotkey**              | On the way     | Q3 2024        |
-| DeepFace Integration (Facial Recognition)                    | Planned  | Q3 2024        |
+```python
+import os
+os.environ["UPSONIC_TELEMETRY"] = "False"
+```
+<br>
+<br>
 
 
 
-
-
-
-
-## Capabilities
-At this time we have many infrastructure elements. We just aim to provide whole things that already in ChatGPT app.
-
-| Capability                         | Status                      |
-|------------------------------------|----------------------------------|
-| **Local LLM with Vision (Ollama)**                    |            OK                    |
-| Local text-to-speech                    |            OK                    |
-| Local speech-to-text                    |            OK                    |
-| **Screen Read**                    |            OK                    |
-| **Click to and Text or Icon in the screen**                    |            OK                    |
-| **Move to and Text or Icon in the screen**                    |            OK                    |
-| **Typing Something**                    |            OK                    |
-| **Pressing to Any Key**                    |            OK                    |
-| **Scrolling**                    |            OK                    |
-| **Microphone**                     |            OK                    |
-| **System Audio**                  |            OK                    |
-| **Memory**                         |            OK                    |
-| **Open and Close App**             |            OK                    |
-| **Open a URL**                     |            OK                    |
-| **Clipboard**                       |            OK                    |
-| **Search Engines**                 |            OK                    |
-| **Writing and running Python**     |            OK                    |
-| **Writing and running SH**    |            OK                    |
-| **Using your Telegram Account**    |            OK                    |
-| **Knowledge Management**           |            OK                    |
-| **[Add more tool](https://github.com/onuratakan/gpt-computer-assistant/blob/master/gpt_computer_assistant/standard_tools.py)**           |            ?                    |
-
-### Predefined Agents
-If you enable it your assistant will work with these teams:
-
-| Team Name                         | Status                      |
-|------------------------------------|----------------------------------|
-| **search_on_internet_and_report_team**                    |            OK                    |
-| **generate_code_with_aim_team_**                    |            OK                    |
-| **[Add your own one](https://github.com/onuratakan/gpt-computer-assistant/blob/master/gpt_computer_assistant/teams.py)**                    |            ?                    |
-
-
-
-  <a href="#">
-    <img src="https://github.com/onuratakan/gpt-computer-assistant/assets/41792982/ba590bf8-6059-4cb6-8c4e-6d105ce4edd2" alt="Logo"  >
-  </a>
-
-
-
-
-## Contributors
-
-<a href="https://github.com/onuratakan/gpt-computer-assistant/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=onuratakan/gpt-computer-assistant" />
-</a>
