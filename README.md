@@ -1,8 +1,6 @@
 
 
-
-
-<img src="https://github.com/user-attachments/assets/e29f7a20-e8a6-47af-b944-285402601039" >
+<img src="https://github.com/user-attachments/assets/cb6539cc-cea2-4a1c-8c26-762868828ac9" >
 <br>
 <br>
 <a name="readme-top"></a>
