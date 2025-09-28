@@ -19,6 +19,7 @@ from openai import AsyncOpenAI, AsyncAzureOpenAI
 from anthropic import AsyncAnthropic, AsyncAnthropicBedrock
 
 from upsonic.models.base import BaseModelProvider
+from upsonic.exceptions import APIKeyMissingError, ConfigurationError
 
 
 class BaseOpenAICompatible(BaseModelProvider):
@@ -30,6 +31,7 @@ class BaseOpenAICompatible(BaseModelProvider):
     reasoning_effort: Literal["low", "medium", "high"] = Field(default="medium")
     reasoning_summary: str = Field(default="detailed")
     model_settings: Optional[Dict[str, Any]] = Field(default=None, description="Generic model settings like temperature, max_tokens, etc.")
+    api_mode: Literal["responses", "chat"] = Field(default="chat")
 
     _env_key_map: str = "OVERRIDE_IN_SUBCLASS"
     _model_meta: Dict[str, Dict[str, Any]] = {}
@@ -46,31 +48,87 @@ class BaseOpenAICompatible(BaseModelProvider):
     @property
     def required_environment_variables(self) -> List[str]: return self._model_meta.get(self.model_name, {}).get("required_environment_variables", [self._env_key_map])
 
-    async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
+    @classmethod
+    def list_available_models(cls) -> List[str]:
+        """Return a list of available model names for this provider."""
+        if hasattr(cls, '_model_meta') and cls._model_meta:
+            return sorted(list(cls._model_meta.keys()))
+        return []
+
+    def _should_validate_api_key(self) -> bool:
+        """
+        Determine whether API key validation should be performed.
+        
+        Returns False if a custom base_url is provided (indicating a local or self-hosted service
+        that might not require an API key), True otherwise.
+        """
+        if not self._env_key_map:
+            return False
+            
+        if not self.base_url:
+            return True
+
+        standard_endpoints = [
+            "https://api.openai.com",
+            "https://api.openai.com/",
+            "https://api.openai.com/v1",
+            "https://api.openai.com/v1/",
+            
+            "https://api.deepseek.com",
+            "https://api.deepseek.com/",
+            "https://api.deepseek.com/v1",
+            "https://api.deepseek.com/v1/",
+            
+            "https://openrouter.ai/api/v1",
+            "https://openrouter.ai/api/v1/",
+            
+            "http://localhost:11434/v1",
+            "http://localhost:11434/v1/",
+            "http://127.0.0.1:11434/v1",
+            "http://127.0.0.1:11434/v1/",
+        ]
+        
+        if self.base_url.rstrip('/') in [endpoint.rstrip('/') for endpoint in standard_endpoints]:
+            return True
+            
+        return False
+
+    async def _provision(self, tools: Optional[List[Any]] = None) -> Tuple[Model, Optional[ModelSettings]]:
         final_api_key = self.api_key.get_secret_value() if self.api_key else os.getenv(self._env_key_map)
-        if self._env_key_map and not final_api_key:
-            raise ValueError(f"API key not found. Please provide it directly or set the {self._env_key_map} environment variable.")
+        should_validate_api_key = self._should_validate_api_key()
+        if should_validate_api_key and self._env_key_map and not final_api_key:
+            raise APIKeyMissingError(type(self).__name__, self._env_key_map)
+
+        if not should_validate_api_key and not final_api_key:
+            final_api_key = "dummy-key-for-custom-endpoint"
 
         client = AsyncOpenAI(api_key=final_api_key, base_url=self.base_url)
         provider = OpenAIProvider(openai_client=client)
-        if self.model_name in ["gpt-4o-audio-preview", "gpt-4o-mini-audio-preview"]:
-            agent_model = self._provision_standard_model(provider)
-        else:
+
+        if self.api_mode == "responses":
             agent_model = self._provision_responses_model(provider)
+        else:
+            agent_model = self._provision_chat_model(provider)
 
         final_settings_dict = {}
         if self.model_settings:
             final_settings_dict.update(self.model_settings)
         
+        if tools and len(tools) > 0:
+            final_settings_dict['parallel_tool_calls'] = False
+        
         if self.enable_reasoning:
             final_settings_dict['openai_reasoning_effort'] = self.reasoning_effort
             final_settings_dict['openai_reasoning_summary'] = self.reasoning_summary
             
-        agent_settings = OpenAIResponsesModelSettings(**final_settings_dict) if final_settings_dict else None
+        if self.api_mode == "responses":
+            agent_settings = OpenAIResponsesModelSettings(**final_settings_dict) if final_settings_dict else None
+        else:
+            agent_settings = OpenAIModelSettings(**final_settings_dict) if final_settings_dict else None
             
         return agent_model, agent_settings
 
-    def _provision_standard_model(self, provider: OpenAIProvider) -> OpenAIModel:
+    def _provision_chat_model(self, provider: OpenAIProvider) -> OpenAIModel:
         """Instantiates a standard pydantic-ai OpenAIModel."""
         return OpenAIModel(model_name=self.model_name, provider=provider)
 
@@ -95,6 +153,9 @@ class OpenAI(BaseOpenAICompatible):
         "gpt-4o-mini-audio-preview": {"pricing": {"input": 10.00, "output": 20.00}, "capabilities": {"audio": ["mp3", "wav", "webm"]}, "required_environment_variables": ["OPENAI_API_KEY"]},
     }
 
+    def __init__(self, **data: Any):
+        super().__init__(**data)
+
 class AzureOpenAI(BaseOpenAICompatible):
     """Configuration factory for Azure OpenAI models."""
     _model_meta: Dict[str, Dict[str, Any]] = {
@@ -104,13 +165,17 @@ class AzureOpenAI(BaseOpenAICompatible):
     azure_endpoint: Optional[str] = Field(default=None)
     api_version: Optional[str] = Field(default=None)
 
-    async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
+    async def _provision(self, tools: Optional[List[Any]] = None) -> Tuple[Model, Optional[ModelSettings]]:
         final_endpoint = self.azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
         final_api_version = self.api_version or os.getenv("AZURE_OPENAI_API_VERSION")
         final_api_key = self.api_key.get_secret_value() if self.api_key else os.getenv("AZURE_OPENAI_API_KEY")
 
-        if not all([final_endpoint, final_api_version, final_api_key]):
-            raise ValueError("Azure credentials not found. Set AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION, and AZURE_OPENAI_API_KEY.")
+        if not final_api_key:
+            raise APIKeyMissingError("AzureOpenAI", "AZURE_OPENAI_API_KEY")
+        if not final_endpoint:
+            raise ConfigurationError("Azure Configuration Error", "AZURE_OPENAI_ENDPOINT environment variable is not set")
+        if not final_api_version:
+            raise ConfigurationError("Azure Configuration Error", "AZURE_OPENAI_API_VERSION environment variable is not set")
 
         client = AsyncAzureOpenAI(azure_endpoint=final_endpoint, api_version=final_api_version, api_key=final_api_key)
         provider = OpenAIProvider(openai_client=client)
@@ -157,8 +222,6 @@ class BaseAnthropic(BaseModelProvider):
 
     def __init__(self, **data: Any):
         super().__init__(**data)
-        if self.model_name not in self._model_meta:
-            raise ValueError(f"Unknown model_name '{self.model_name}' for {type(self).__name__} provider.")
 
     @property
     def pricing(self) -> Dict[str, float]: return self._model_meta[self.model_name]['pricing']
@@ -167,22 +230,29 @@ class BaseAnthropic(BaseModelProvider):
     @property
     def required_environment_variables(self) -> List[str]: return self._model_meta[self.model_name]['required_environment_variables']
 
+    @classmethod
+    def list_available_models(cls) -> List[str]:
+        """Return a list of available model names for this provider."""
+        if hasattr(cls, '_model_meta') and cls._model_meta:
+            return sorted(list(cls._model_meta.keys()))
+        return []
+
 class Anthropic(BaseAnthropic):
     """Configuration factory for official Anthropic Claude models."""
     _model_meta: Dict[str, Dict[str, Any]] = {
         "claude-3-5-sonnet-latest": {"pricing": {"input": 3.00, "output": 15.00}, "capabilities": {"computer_use": []}, "required_environment_variables": ["ANTHROPIC_API_KEY"]},
         "claude-3-7-sonnet-latest": {"pricing": {"input": 3.00, "output": 15.00}, "capabilities": {"computer_use": []}, "required_environment_variables": ["ANTHROPIC_API_KEY"]},
     }
-    async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
+    async def _provision(self, tools: Optional[List[Any]] = None) -> Tuple[Model, Optional[ModelSettings]]:
         final_api_key = self.api_key.get_secret_value() if self.api_key else os.getenv("ANTHROPIC_API_KEY")
         if not final_api_key:
-            raise ValueError("API key not found. Please provide it directly or set the ANTHROPIC_API_KEY environment variable.")
+            raise APIKeyMissingError("Anthropic", "ANTHROPIC_API_KEY")
         client = AsyncAnthropic(api_key=final_api_key)
         provider = AnthropicProvider(anthropic_client=client)
         agent_model = AnthropicModel(self.model_name, provider=provider)
         agent_settings = None
         if self.enable_reasoning:
-            agent_settings = AnthropicModelSettings(anthropic_thinking={'type': 'enabled', 'budget_tokens': self.reasoning_budget_tokens})
+            agent_settings = AnthropicModelSettings(anthropic_thinking={'type': 'enabled', 'budget_tokens': self.reasoning_budget_tokens}, parallel_tool_calls=False)
         return agent_model, agent_settings
 
 class BedrockAnthropic(BaseAnthropic):
@@ -190,18 +260,22 @@ class BedrockAnthropic(BaseAnthropic):
     _model_meta: Dict[str, Dict[str, Any]] = {
         "us.anthropic.claude-3-5-sonnet-20240620-v1:0": {"pricing": {"input": 3.00, "output": 15.00}, "capabilities": {"computer_use": []}, "required_environment_variables": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"]},
     }
-    async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
+    async def _provision(self, tools: Optional[List[Any]] = None) -> Tuple[Model, Optional[ModelSettings]]:
         aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
         aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
         aws_region = os.getenv("AWS_REGION")
-        if not all([aws_access_key, aws_secret_key, aws_region]):
-            raise ValueError("AWS credentials not found. Please set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION.")
+        if not aws_access_key:
+            raise ConfigurationError("AWS Configuration Error", "AWS_ACCESS_KEY_ID environment variable is not set")
+        if not aws_secret_key:
+            raise ConfigurationError("AWS Configuration Error", "AWS_SECRET_ACCESS_KEY environment variable is not set")  
+        if not aws_region:
+            raise ConfigurationError("AWS Configuration Error", "AWS_REGION environment variable is not set")
         client = AsyncAnthropicBedrock(aws_access_key=aws_access_key, aws_secret_key=aws_secret_key, aws_region=aws_region)
         provider = AnthropicProvider(anthropic_client=client)
         agent_model = AnthropicModel(self.model_name, provider=provider)
         agent_settings = None
         if self.enable_reasoning:
-            agent_settings = AnthropicModelSettings(anthropic_thinking={'type': 'enabled', 'budget_tokens': self.reasoning_budget_tokens})
+            agent_settings = AnthropicModelSettings(anthropic_thinking={'type': 'enabled', 'budget_tokens': self.reasoning_budget_tokens}, parallel_tool_calls=False)
         return agent_model, agent_settings
 
 class Gemini(BaseModelProvider):
@@ -222,8 +296,6 @@ class Gemini(BaseModelProvider):
     
     def __init__(self, **data: Any):
         super().__init__(**data)
-        if self.model_name not in self._model_meta:
-            raise ValueError(f"Unknown model_name '{self.model_name}' for Gemini provider.")
 
     @property
     def pricing(self) -> Dict[str, float]: return self._model_meta[self.model_name]['pricing']
@@ -232,10 +304,17 @@ class Gemini(BaseModelProvider):
     @property
     def required_environment_variables(self) -> List[str]: return self._model_meta[self.model_name]['required_environment_variables']
 
-    async def _provision(self) -> Tuple[Model, Optional[ModelSettings]]:
+    @classmethod
+    def list_available_models(cls) -> List[str]:
+        """Return a list of available model names for this provider."""
+        if hasattr(cls, '_model_meta') and cls._model_meta:
+            return sorted(list(cls._model_meta.keys()))
+        return []
+
+    async def _provision(self, tools: Optional[List[Any]] = None) -> Tuple[Model, Optional[ModelSettings]]:
         final_api_key = self.api_key.get_secret_value() if self.api_key else os.getenv("GOOGLE_GLA_API_KEY")
         if not final_api_key:
-            raise ValueError("API key not found. Please provide it directly or set the GOOGLE_GLA_API_KEY environment variable.")
+            raise APIKeyMissingError("Gemini", "GOOGLE_GLA_API_KEY")
         provider = GoogleGLAProvider(api_key=final_api_key)
         agent_model = GeminiModel(self.model_name, provider=provider)
         agent_settings = None
