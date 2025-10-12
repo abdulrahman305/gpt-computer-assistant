@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         MemoryManager, SystemPromptManager, TaskManager
     )
     from upsonic.graph.graph import State
+    from ..db.database import DatabaseBase
 else:
     Model = "Model"
     ModelRequest = "ModelRequest"
@@ -113,12 +114,13 @@ class Agent(BaseAgent):
         *,
         name: Optional[str] = None,
         memory: Optional["Memory"] = None,
+        db: Optional["DatabaseBase"] = None,
         debug: bool = False,
         company_url: Optional[str] = None,
         company_objective: Optional[str] = None,
         company_description: Optional[str] = None,
         system_prompt: Optional[str] = None,
-        reflection: Optional[str] = None,
+        reflection: bool = False,
         compression_strategy: Literal["none", "simple", "llmlingua"] = "none",
         compression_settings: Optional[Dict[str, Any]] = None,
         reliability_layer: Optional[Any] = None,
@@ -141,7 +143,6 @@ class Agent(BaseAgent):
         settings: Optional["ModelSettings"] = None,
         profile: Optional["ModelProfile"] = None,
         reflection_config: Optional["ReflectionConfig"] = None,
-        recommend_model: bool = False,
         model_selection_criteria: Optional[Dict[str, Any]] = None,
         use_llm_for_selection: bool = False,
     ):
@@ -152,12 +153,13 @@ class Agent(BaseAgent):
             model: Model identifier or Model instance
             name: Agent name for identification
             memory: Memory instance for conversation history
+            db: Database instance (overrides memory if provided)
             debug: Enable debug logging
             company_url: Company URL for context
             company_objective: Company objective for context
             company_description: Company description for context
             system_prompt: Custom system prompt
-            reflection: Reflection capabilities
+            reflection: Reflection capabilities (default is False)
             compression_strategy: The method for context compression ('none', 'simple', 'llmlingua').
             compression_settings: A dictionary of settings for the chosen strategy.
                 - For "simple": {"max_length": 2000}
@@ -182,7 +184,6 @@ class Agent(BaseAgent):
             settings: Model-specific settings
             profile: Model profile configuration
             reflection_config: Configuration for reflection and self-evaluation
-            recommend_model: Deprecated - use recommend_model_for_task() method instead
             model_selection_criteria: Default criteria dictionary for recommend_model_for_task() (see SelectionCriteria)
             use_llm_for_selection: Default flag for whether to use LLM in recommend_model_for_task()
         """
@@ -206,7 +207,6 @@ class Agent(BaseAgent):
         self.reflection = reflection
         
         # Model selection attributes
-        self.recommend_model = recommend_model
         self.model_selection_criteria = model_selection_criteria
         self.use_llm_for_selection = use_llm_for_selection
         self._model_recommendation: Optional[Any] = None  # Store last recommendation
@@ -245,7 +245,15 @@ class Agent(BaseAgent):
         self.enable_thinking_tool = enable_thinking_tool
         self.enable_reasoning_tool = enable_reasoning_tool
         
-        self.memory = memory
+        # Set db attribute
+        self.db = db
+        
+        # Set memory attribute - override with db.memory if db is provided
+        if db is not None:
+            self.memory = db.memory
+        else:
+            self.memory = memory
+            
         if self.memory:
             self.memory.feed_tool_call_results = feed_tool_call_results
         
@@ -1335,7 +1343,7 @@ class Agent(BaseAgent):
                                     
                                     final_response = await self._handle_model_response(response, messages)
                                 
-                                if self.reflection_processor:
+                                if self.reflection_processor and self.reflection:
                                     output = self._extract_output(final_response, task)
                                     improved_output = await self.reflection_processor.process_with_reflection(
                                         self, task, output
