@@ -1,6 +1,6 @@
 [project]
 name = "upsonic"
-version = "0.63.0"
+version = "0.64.1"
 description = "Agent Framework For Fintech"
 readme = "README.md"
 authors = [
@@ -26,6 +26,7 @@ dependencies = [
     "httpx>=0.28.1",
     "aiohttp>=3.12.15",
     "requests>=2.32.5",
+    "openai>=2.2.0",
 ]
 
 [project.optional-dependencies]
