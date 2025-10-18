@@ -14,7 +14,7 @@ from rich.markup import escape
 
 console = Console()
 
-def get_estimated_cost(input_tokens: int, output_tokens: int, model_provider: Union["Model", str]) -> str:
+def get_estimated_cost(input_tokens: int, output_tokens: int, model: Union["Model", str]) -> str:
     """
     Calculate estimated cost based on tokens and model provider.
     
@@ -24,7 +24,7 @@ def get_estimated_cost(input_tokens: int, output_tokens: int, model_provider: Un
     Args:
         input_tokens: Number of input/prompt tokens
         output_tokens: Number of output/completion tokens  
-        model_provider: Model instance or model name string
+        model: Model instance or model name string
         
     Returns:
         Formatted cost string (e.g., "~$0.0123")
@@ -48,7 +48,7 @@ def get_estimated_cost(input_tokens: int, output_tokens: int, model_provider: Un
                 output_tokens=output_tokens
             )
             
-            model_name = _get_model_name(model_provider)
+            model_name = _get_model_name(model)
             cost = calculate_cost(usage, model_name)
             return f"~${cost:.4f}"
             
@@ -57,7 +57,7 @@ def get_estimated_cost(input_tokens: int, output_tokens: int, model_provider: Un
         except Exception:
             pass
         
-        model_name = _get_model_name(model_provider)
+        model_name = _get_model_name(model)
         pricing_data = _get_model_pricing(model_name)
         
         if not pricing_data:
@@ -82,20 +82,20 @@ def get_estimated_cost(input_tokens: int, output_tokens: int, model_provider: Un
         return "~$0.0000"
 
 
-def _get_model_name(model_provider: Union["Model", str]) -> str:
+def _get_model_name(model: Union["Model", str]) -> str:
     """Extract model name from model provider."""
-    if isinstance(model_provider, str):
-        if '/' in model_provider:
-            return model_provider.split('/', 1)[1]
-        return model_provider
-    elif hasattr(model_provider, 'model_name'):
-        model_name = model_provider.model_name
+    if isinstance(model, str):
+        if '/' in model:
+            return model.split('/', 1)[1]
+        return model
+    elif hasattr(model, 'model_name'):
+        model_name = model.model_name
         # Handle case where model_name might be a coroutine (in tests)
         if hasattr(model_name, '__await__'):
             return "test-model"  # Default for async mocks
         return model_name
     else:
-        return str(model_provider)
+        return str(model)
 
 
 def _get_model_pricing(model_name: str) -> Optional[Dict[str, float]]:
@@ -245,7 +245,7 @@ def _get_model_pricing(model_name: str) -> Optional[Dict[str, float]]:
     return pricing_map.get(model_name)
 
 
-def get_estimated_cost_from_usage(usage: Union[Dict[str, int], Any], model_provider: Union["Model", str]) -> str:
+def get_estimated_cost_from_usage(usage: Union[Dict[str, int], Any], model: Union["Model", str]) -> str:
     """Calculate estimated cost from usage data."""
     try:
         if isinstance(usage, dict):
@@ -256,14 +256,14 @@ def get_estimated_cost_from_usage(usage: Union[Dict[str, int], Any], model_provi
             input_tokens = usage.input_tokens
             output_tokens = usage.output_tokens
         
-        return get_estimated_cost(input_tokens, output_tokens, model_provider)
+        return get_estimated_cost(input_tokens, output_tokens, model)
         
     except Exception as e:
         console.print(f"[yellow]Warning: Cost calculation from usage failed: {e}[/yellow]")
         return "~$0.0000"
 
 
-def get_estimated_cost_from_run_result(run_result: Any, model_provider: Union["Model", str]) -> str:
+def get_estimated_cost_from_run_result(run_result: Any, model: Union["Model", str]) -> str:
     """Calculate estimated cost from a RunResult object."""
     try:
         total_input_tokens = 0
@@ -278,14 +278,14 @@ def get_estimated_cost_from_run_result(run_result: Any, model_provider: Union["M
                     total_input_tokens += usage.input_tokens
                     total_output_tokens += usage.output_tokens
         
-        return get_estimated_cost(total_input_tokens, total_output_tokens, model_provider)
+        return get_estimated_cost(total_input_tokens, total_output_tokens, model)
         
     except Exception as e:
         console.print(f"[yellow]Warning: Cost calculation from RunResult failed: {e}[/yellow]")
         return "~$0.0000"
 
 
-def get_estimated_cost_from_stream_result(stream_result: Any, model_provider: Union["Model", str]) -> str:
+def get_estimated_cost_from_stream_result(stream_result: Any, model: Union["Model", str]) -> str:
     """Calculate estimated cost from a StreamRunResult object."""
     try:
         total_input_tokens = 0
@@ -300,7 +300,7 @@ def get_estimated_cost_from_stream_result(stream_result: Any, model_provider: Un
                     total_input_tokens += usage.input_tokens
                     total_output_tokens += usage.output_tokens
         
-        return get_estimated_cost(total_input_tokens, total_output_tokens, model_provider)
+        return get_estimated_cost(total_input_tokens, total_output_tokens, model)
         
     except Exception as e:
         console.print(f"[yellow]Warning: Cost calculation from StreamRunResult failed: {e}[/yellow]")
@@ -388,7 +388,7 @@ def connected_to_server(server_type: str, status: str, total_time: float = None)
 
     spacing()
 
-def call_end(result: Any, model_provider: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False, price_id: str = None):
+def call_end(result: Any, model: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, debug: bool = False, price_id: str = None):
     if tool_usage and len(tool_usage) > 0:
         tool_table = Table(show_header=True, expand=True, box=None)
         tool_table.width = 60
@@ -427,12 +427,12 @@ def call_end(result: Any, model_provider: Any, response_format: str, start_time:
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
 
-    display_model_name = escape_rich_markup(model_provider.model_name)
+    display_model_name = escape_rich_markup(model.model_name)
     response_format = escape_rich_markup(response_format)
     price_id_display = escape_rich_markup(price_id) if price_id else None
 
     if price_id:
-        estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model_provider)
+        estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model)
         if price_id not in price_id_summary:
             price_id_summary[price_id] = {
                 'input_tokens': 0,
@@ -472,7 +472,7 @@ def call_end(result: Any, model_provider: Any, response_format: str, start_time:
 
 
 
-def agent_end(result: Any, model_provider: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
+def agent_end(result: Any, model: Any, response_format: str, start_time: float, end_time: float, usage: dict, tool_usage: list, tool_count: int, context_count: int, debug: bool = False, price_id:str = None):
     if tool_usage and len(tool_usage) > 0:
         tool_table = Table(show_header=True, expand=True, box=None)
         tool_table.width = 60
@@ -511,12 +511,12 @@ def agent_end(result: Any, model_provider: Any, response_format: str, start_time
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
 
-    display_model_name = escape_rich_markup(model_provider.model_name)
+    display_model_name = escape_rich_markup(model.model_name)
     response_format = escape_rich_markup(response_format)
     price_id = escape_rich_markup(price_id) if price_id else None
 
     if price_id:
-        estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model_provider)
+        estimated_cost = get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model)
         if price_id not in price_id_summary:
             price_id_summary[price_id] = {
                 'input_tokens': 0,
@@ -547,7 +547,7 @@ def agent_end(result: Any, model_provider: Any, response_format: str, start_time
     table.add_row("[bold]Response Format:[/bold]", f"{response_format}")
     
     table.add_row("[bold]Tools:[/bold]", f"{tool_count} [bold]Context Used:[/bold]", f"{context_count}")
-    table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model_provider)}$")
+    table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(usage['input_tokens'], usage['output_tokens'], model)}$")
     time_taken = end_time - start_time
     time_taken_str = f"{time_taken:.2f} seconds"
     table.add_row("[bold]Time Taken:[/bold]", f"{time_taken_str}")
@@ -563,13 +563,13 @@ def agent_end(result: Any, model_provider: Any, response_format: str, start_time
     spacing()
 
 
-def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_time: float, model_provider: Any):
+def agent_total_cost(total_input_tokens: int, total_output_tokens: int, total_time: float, model: Any):
     table = Table(show_header=False, expand=True, box=None)
     table.width = 60
     
-    llm_model = escape_rich_markup(model_provider.model_name)
+    llm_model = escape_rich_markup(model.model_name)
 
-    table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(total_input_tokens, total_output_tokens, model_provider)}$")
+    table.add_row("[bold]Estimated Cost:[/bold]", f"{get_estimated_cost(total_input_tokens, total_output_tokens, model)}$")
     table.add_row("[bold]Time Taken:[/bold]", f"{total_time:.2f} seconds")
     panel = Panel(
         table,
@@ -1693,3 +1693,88 @@ def simple_output(message: str) -> None:
         message: Message to print
     """
     console.print(message)
+
+
+def deep_agent_todo_completion_check(iteration: int, completed_count: int, total_count: int) -> None:
+    """
+    Print a formatted panel for Deep Agent todo completion check.
+    
+    Args:
+        iteration: Current iteration number
+        completed_count: Number of completed todos
+        total_count: Total number of todos
+    """
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    completion_percentage = (completed_count / total_count * 100) if total_count > 0 else 0
+    
+    table.add_row("[bold]Todo Completion Check:[/bold]", f"[cyan]Iteration {iteration}[/cyan]")
+    table.add_row("[bold]Completed:[/bold]", f"[green]{completed_count}/{total_count}[/green]")
+    table.add_row("[bold]Progress:[/bold]", f"[yellow]{completion_percentage:.1f}%[/yellow]")
+    table.add_row("[bold]Status:[/bold]", "[blue]Continuing to complete remaining todos...[/blue]")
+    
+    panel = Panel(
+        table,
+        title="[bold yellow]⚠️ Deep Agent - Todo Completion Check[/bold yellow]",
+        border_style="yellow",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+
+
+def deep_agent_all_todos_completed(total_count: int) -> None:
+    """
+    Print a formatted panel when all Deep Agent todos are completed.
+    
+    Args:
+        total_count: Total number of todos that were completed
+    """
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    table.add_row("[bold]Status:[/bold]", "[green]✅ All todos completed successfully![/green]")
+    table.add_row("[bold]Total Completed:[/bold]", f"[green]{total_count}[/green]")
+    table.add_row("[bold]Result:[/bold]", "[green]Deep Agent task finished[/green]")
+    
+    panel = Panel(
+        table,
+        title="[bold green]✅ Deep Agent - All Todos Completed[/bold green]",
+        border_style="green",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
+
+
+def deep_agent_max_iterations_warning(max_iterations: int, incomplete_count: int) -> None:
+    """
+    Print a formatted panel when Deep Agent reaches maximum iterations with incomplete todos.
+    
+    Args:
+        max_iterations: Maximum number of iterations allowed
+        incomplete_count: Number of todos still incomplete
+    """
+    table = Table(show_header=False, expand=True, box=None)
+    table.width = 60
+    
+    table.add_row("[bold]Status:[/bold]", "[red]⚠️ WARNING: Maximum iterations reached[/red]")
+    table.add_row("[bold]Max Iterations:[/bold]", f"[yellow]{max_iterations}[/yellow]")
+    table.add_row("[bold]Incomplete Todos:[/bold]", f"[red]{incomplete_count}[/red]")
+    table.add_row("[bold]Action:[/bold]", "[yellow]Stopping execution[/yellow]")
+    
+    panel = Panel(
+        table,
+        title="[bold red]⚠️ Deep Agent - Max Iterations Warning[/bold red]",
+        border_style="red",
+        expand=True,
+        width=70
+    )
+    
+    console.print(panel)
+    spacing()
