@@ -79,6 +79,35 @@ def _get_tool():
 def _get_Chat():
     return _lazy_import("upsonic.chat.chat", "Chat")()
 
+def _get_Direct():
+    return _lazy_import("upsonic.direct", "Direct")()
+
+def _get_OCR():
+    return _lazy_import("upsonic.ocr.ocr", "OCR")()
+
+def _get_Memory():
+    return _lazy_import("upsonic.storage.memory.memory", "Memory")()
+
+def _get_durable_execution_components():
+    """Lazy import of durable execution components."""
+    from upsonic.durable import (
+        DurableExecution,
+        DurableExecutionStorage,
+        InMemoryDurableStorage,
+        FileDurableStorage,
+        SQLiteDurableStorage,
+        RedisDurableStorage
+    )
+    
+    return {
+        "DurableExecution": DurableExecution,
+        "DurableExecutionStorage": DurableExecutionStorage,
+        "InMemoryDurableStorage": InMemoryDurableStorage,
+        "FileDurableStorage": FileDurableStorage,
+        "SQLiteDurableStorage": SQLiteDurableStorage,
+        "RedisDurableStorage": RedisDurableStorage,
+    }
+
 def _get_database_components():
     """Lazy import of database components."""
     try:
@@ -164,6 +193,81 @@ def _get_exception_classes():
         'NoAPIKeyException': NoAPIKeyException,
     }
 
+def _get_vectordb_components():
+    """Lazy import of vectordb components."""
+    try:
+        from upsonic.vectordb import (
+            # Base classes
+            BaseVectorDBProvider,
+            BaseVectorDBConfig,
+            
+            # Provider classes
+            ChromaProvider,
+            FaissProvider,
+            PineconeProvider,
+            QdrantProvider,
+            MilvusProvider,
+            WeaviateProvider,
+            PgVectorProvider,
+            
+            # Config classes
+            DistanceMetric,
+            IndexType,
+            Mode,
+            ConnectionConfig,
+            HNSWIndexConfig,
+            IVFIndexConfig,
+            FlatIndexConfig,
+            PayloadFieldConfig,
+            ChromaConfig,
+            FaissConfig,
+            QdrantConfig,
+            PineconeConfig,
+            MilvusConfig,
+            WeaviateConfig,
+            PgVectorConfig,
+            
+            # Factory function
+            create_config,
+        )
+        
+        return {
+            # Base classes
+            "BaseVectorDBProvider": BaseVectorDBProvider,
+            "BaseVectorDBConfig": BaseVectorDBConfig,
+            
+            # Provider classes
+            "ChromaProvider": ChromaProvider,
+            "FaissProvider": FaissProvider,
+            "PineconeProvider": PineconeProvider,
+            "QdrantProvider": QdrantProvider,
+            "MilvusProvider": MilvusProvider,
+            "WeaviateProvider": WeaviateProvider,
+            "PgVectorProvider": PgVectorProvider,
+            
+            # Config classes
+            "DistanceMetric": DistanceMetric,
+            "IndexType": IndexType,
+            "Mode": Mode,
+            "ConnectionConfig": ConnectionConfig,
+            "HNSWIndexConfig": HNSWIndexConfig,
+            "IVFIndexConfig": IVFIndexConfig,
+            "FlatIndexConfig": FlatIndexConfig,
+            "PayloadFieldConfig": PayloadFieldConfig,
+            "ChromaConfig": ChromaConfig,
+            "FaissConfig": FaissConfig,
+            "QdrantConfig": QdrantConfig,
+            "PineconeConfig": PineconeConfig,
+            "MilvusConfig": MilvusConfig,
+            "WeaviateConfig": WeaviateConfig,
+            "PgVectorConfig": PgVectorConfig,
+            
+            # Factory function
+            "create_config": create_config,
+        }
+    except ImportError:
+        return {}
+
 def hello() -> str:
     return "Hello from upsonic!"
 
@@ -204,10 +308,20 @@ def __getattr__(name: str) -> Any:
         return _get_tool()
     elif name == "Chat":
         return _get_Chat()
+    elif name == "Direct":
+        return _get_Direct()
+    elif name == "OCR":
+        return _get_OCR()
+    elif name == "Memory":
+        return _get_Memory()
     
     database_components = _get_database_components()
     if name in database_components:
         return database_components[name]
+    
+    durable_components = _get_durable_execution_components()
+    if name in durable_components:
+        return durable_components[name]
     
     safety_components = _get_safety_engine_components()
     if name in safety_components:
@@ -216,6 +330,10 @@ def __getattr__(name: str) -> Any:
     exception_classes = _get_exception_classes()
     if name in exception_classes:
         return exception_classes[name]
+    
+    vectordb_components = _get_vectordb_components()
+    if name in vectordb_components:
+        return vectordb_components[name]
     
     if name == "MultiAgent":
         return _get_Team()
@@ -239,6 +357,9 @@ __all__ = [
     "MultiAgent",
     "Team",
     "Chat",
+    "Direct",
+    "OCR",
+    "Memory",
     "UupsonicError",
     "AgentExecutionError", 
     "ModelConnectionError", 
@@ -278,4 +399,36 @@ __all__ = [
     "InMemoryDatabase",
     "JSONDatabase",
     "Mem0Database",
+    "DurableExecution",
+    "DurableExecutionStorage",
+    "InMemoryDurableStorage",
+    "FileDurableStorage",
+    "SQLiteDurableStorage",
+    "RedisDurableStorage",
+    # VectorDB components
+    "BaseVectorDBProvider",
+    "BaseVectorDBConfig",
+    "ChromaProvider",
+    "FaissProvider",
+    "PineconeProvider",
+    "QdrantProvider",
+    "MilvusProvider",
+    "WeaviateProvider",
+    "PgVectorProvider",
+    "DistanceMetric",
+    "IndexType",
+    "Mode",
+    "ConnectionConfig",
+    "HNSWIndexConfig",
+    "IVFIndexConfig",
+    "FlatIndexConfig",
+    "PayloadFieldConfig",
+    "ChromaConfig",
+    "FaissConfig",
+    "QdrantConfig",
+    "PineconeConfig",
+    "MilvusConfig",
+    "WeaviateConfig",
+    "PgVectorConfig",
+    "create_config",
 ]

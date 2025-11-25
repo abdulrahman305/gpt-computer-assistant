@@ -71,6 +71,9 @@ class DeepAgent(Agent):
     Attributes:
         deep_agent_state: State containing todos and virtual filesystem
         subagents: List of Agent instances to use as subagents
+        model: Model identifier or Model instance
+        instructions: Additional instructions to append to system prompt
+        **kwargs: Additional arguments passed to base Agent
     """
     
     def __init__(
@@ -115,7 +118,9 @@ class DeepAgent(Agent):
             kwargs['memory'] = Memory(
                 storage=storage,
                 session_id=f"deep_agent_session_{agent_uuid}",
-                user_id=f"deep_agent_user_{agent_uuid}"
+                user_id=f"deep_agent_user_{agent_uuid}",
+                full_session_memory=True,
+                feed_tool_call_results=True,
             )
         
         super().__init__(model, **kwargs)

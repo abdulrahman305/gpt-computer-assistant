@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from upsonic.safety_engine.base import Policy
     from upsonic.safety_engine.exceptions import DisallowedOperation
     from upsonic.safety_engine.models import PolicyInput, RuleOutput
-    from upsonic.tools import ToolManager, ToolContext, ToolDefinition
+    from upsonic.tools import ToolManager, ToolMetrics, ToolDefinition
     from upsonic.usage import RequestUsage
     from upsonic.agent.context_managers import (
         CallManager, ContextManager, ReliabilityManager, 
@@ -56,7 +56,7 @@ else:
     PolicyInput = "PolicyInput"
     RuleOutput = "RuleOutput"
     ToolManager = "ToolManager"
-    ToolContext = "ToolContext"
+    ToolMetrics = "ToolMetrics"
     ToolDefinition = "ToolDefinition"
     RequestUsage = "RequestUsage"
     validate_attachments_exist = "validate_attachments_exist"
@@ -316,7 +316,6 @@ class Agent(BaseAgent):
         self._cache_manager = CacheManager(session_id=f"agent_{self.agent_id}")
         self.tool_manager = ToolManager()
         
-        self.tool_call_count = 0
         self._current_messages = []
         self._tool_call_count = 0
         
@@ -461,11 +460,9 @@ class Agent(BaseAgent):
         if not task.tools:
             return
         
-        from upsonic.tools import ToolContext
-        self._context = ToolContext(
-            deps=getattr(self, 'dependencies', None),
-            agent_id=self.name,
-            max_retries=self.retry,
+        from upsonic.tools import ToolMetrics
+        self._tool_metrics = ToolMetrics(
+            tool_call_count=self._tool_call_count,
             tool_call_limit=self.tool_call_limit
         )
         
@@ -493,7 +490,6 @@ class Agent(BaseAgent):
         
         self.tool_manager.register_tools(
             tools=final_tools,
-            context=self._context,
             task=task,
             agent_instance=agent_for_this_run
         )
@@ -630,7 +626,6 @@ class Agent(BaseAgent):
         Other tools can be executed in parallel if multiple are called.
         """
         from upsonic.messages import ToolReturnPart
-        from upsonic.tools import ToolContext
         
         if not tool_calls:
             return []
@@ -662,29 +657,16 @@ class Agent(BaseAgent):
         
         for tool_call in sequential_calls:
             try:
-                task_id = None
-                if hasattr(self, 'current_task') and self.current_task:
-                    task_id = getattr(self.current_task, 'id', None) or getattr(self.current_task, 'price_id', None)
-                
                 result = await self.tool_manager.execute_tool(
                     tool_name=tool_call.tool_name,
                     args=tool_call.args_as_dict(),
-                    context=ToolContext(
-                        deps=getattr(self, 'dependencies', None),
-                        agent_id=self.name,
-                        task_id=task_id,
-                        messages=self._current_messages,
-                        retry=0,
-                        max_retries=self.retry,
-                        tool_call_count=self._tool_call_count,
-                        tool_call_limit=self.tool_call_limit
-                    ),
+                    metrics=self._tool_metrics,
                     tool_call_id=tool_call.tool_call_id
                 )
                 
                 self._tool_call_count += 1
-                if hasattr(self, '_context') and self._context:
-                    self._context.tool_call_count = self._tool_call_count
+                if hasattr(self, '_tool_metrics') and self._tool_metrics:
+                    self._tool_metrics.tool_call_count = self._tool_call_count
                 
                 tool_return = ToolReturnPart(
                     tool_name=result.tool_name,
@@ -709,23 +691,10 @@ class Agent(BaseAgent):
             async def execute_single_tool(tool_call: "ToolCallPart") -> "ToolReturnPart":
                 """Execute a single tool call and return the result."""
                 try:
-                    task_id = None
-                    if hasattr(self, 'current_task') and self.current_task:
-                        task_id = getattr(self.current_task, 'id', None) or getattr(self.current_task, 'price_id', None)
-                    
                     result = await self.tool_manager.execute_tool(
                         tool_name=tool_call.tool_name,
                         args=tool_call.args_as_dict(),
-                        context=ToolContext(
-                            deps=getattr(self, 'dependencies', None),
-                            agent_id=self.name,
-                            task_id=task_id,
-                            messages=self._current_messages,
-                            retry=0,
-                            max_retries=self.retry,
-                            tool_call_count=self._tool_call_count,
-                            tool_call_limit=self.tool_call_limit
-                        ),
+                        metrics=self._tool_metrics,
                         tool_call_id=tool_call.tool_call_id
                     )
                     
@@ -752,8 +721,8 @@ class Agent(BaseAgent):
             )
             
             self._tool_call_count += len(parallel_calls)
-            if hasattr(self, '_context') and self._context:
-                self._context.tool_call_count = self._tool_call_count
+            if hasattr(self, '_tool_metrics') and self._tool_metrics:
+                self._tool_metrics.tool_call_count = self._tool_call_count
             
             results.extend(parallel_results)
         
@@ -908,6 +877,10 @@ class Agent(BaseAgent):
         )
         
         if result.should_block():
+            # Re-raise DisallowedOperation if it was caught by PolicyManager
+            if result.disallowed_exception:
+                raise result.disallowed_exception
+            
             task.task_end()
             task._response = result.get_final_message()
             return task, False
@@ -1244,6 +1217,10 @@ class Agent(BaseAgent):
             
             # Apply the result
             if result.should_block():
+                # Re-raise DisallowedOperation if it was caught by PolicyManager
+                if result.disallowed_exception:
+                    raise result.disallowed_exception
+                
                 task._response = result.get_final_message()
             elif result.action_taken in ["REPLACE", "ANONYMIZE"]:
                 task._response = result.final_output or "Response modified by agent policy."
@@ -1317,6 +1294,11 @@ class Agent(BaseAgent):
             CacheStorageStep, FinalizationStep
         )
         
+        # Update policy managers debug flag if debug is enabled
+        if debug:
+            self.user_policy_manager.debug = True
+            self.agent_policy_manager.debug = True
+        
         async with self._managed_storage_connection():
             pipeline = PipelineManager(
                 steps=[
@@ -1333,10 +1315,10 @@ class Agent(BaseAgent):
                     ResponseProcessingStep(),
                     ReflectionStep(),
                     MemoryMessageTrackingStep(),
+                    AgentPolicyStep(),  # Move before CallManagementStep
                     CallManagementStep(),
                     TaskManagementStep(),
                     ReliabilityStep(),
-                    AgentPolicyStep(),
                     CacheStorageStep(),
                     FinalizationStep(),
                 ],
@@ -1356,9 +1338,21 @@ class Agent(BaseAgent):
             return self._run_result.output
     
     def _extract_output(self, response: "ModelResponse", task: "Task") -> Any:
-        """Extract output from model response based on task response format."""
+        """Extract output from model response based on task response format.
+        
+        For image generation tasks, if the response contains images, returns the bytes
+        of the first image. Otherwise, extracts text content based on the task's
+        response format.
+        """
         from upsonic.messages import TextPart
         
+        # Check for images first - if images are present, return bytes from the first image
+        images = response.images
+        if images:
+            # Return bytes from the first image
+            return images[0].data
+        
+        # Extract text parts for non-image responses
         text_parts = [part.content for part in response.parts if isinstance(part, TextPart)]
         
         if task.response_format == str or task.response_format is str:
@@ -1537,12 +1531,17 @@ class Agent(BaseAgent):
     
     def _extract_text_from_stream_event(self, event: "ModelResponseStreamEvent") -> Optional[str]:
         """Extract text content from a streaming event."""
-        from upsonic.messages import PartStartEvent, PartDeltaEvent, TextPart
+        from upsonic.messages import PartStartEvent, PartDeltaEvent, TextPart, TextPartDelta
         
         if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
             return event.part.content
-        elif isinstance(event, PartDeltaEvent) and hasattr(event.delta, 'content_delta'):
-            return event.delta.content_delta
+        elif isinstance(event, PartDeltaEvent):
+            # Check if delta is a TextPartDelta specifically
+            if isinstance(event.delta, TextPartDelta):
+                return event.delta.content_delta
+            # Fallback to hasattr check for compatibility
+            elif hasattr(event.delta, 'content_delta'):
+                return event.delta.content_delta
         return None
     
     async def _create_stream_iterator(
@@ -1738,20 +1737,358 @@ class Agent(BaseAgent):
         if not task.is_paused or not task.tools_awaiting_external_execution:
             raise ValueError("The 'continue_async' method can only be called on a task that is currently paused for external execution.")
         
-        tool_results_prompt = "\nThe following external tools were executed. Use their results to continue the task:\n"
-        for tool_call in task.tools_awaiting_external_execution:
-            tool_results_prompt += f"\n- Tool '{tool_call.tool_name}' was executed with arguments {tool_call.args}.\n"
-            tool_results_prompt += f"  Result: {tool_call.result}\n"
+        from upsonic.agent.pipeline import (
+            PipelineManager, StepContext,
+            MessageBuildStep, ModelExecutionStep, ResponseProcessingStep,
+            ReflectionStep, CallManagementStep, TaskManagementStep,
+            MemoryMessageTrackingStep, ReliabilityStep, AgentPolicyStep,
+            CacheStorageStep, FinalizationStep
+        )
+        from upsonic.messages import ToolReturnPart
+        from upsonic._utils import now_utc
         
+        # Convert external tool results to ToolReturnPart messages
+        tool_return_parts = []
+        for tool_call in task.tools_awaiting_external_execution:
+            # Handle both ExternalToolCall (with tool_call_id) and ToolCall objects
+            tool_call_id = None
+            if hasattr(tool_call, 'tool_call_id'):
+                tool_call_id = tool_call.tool_call_id
+            
+            # Get the result - ExternalToolCall uses 'result', ToolCall also uses 'result'
+            result = getattr(tool_call, 'result', None)
+            
+            tool_return = ToolReturnPart(
+                tool_name=tool_call.tool_name,
+                content=result,
+                tool_call_id=tool_call_id,
+                timestamp=now_utc()
+            )
+            tool_return_parts.append(tool_return)
+        
+        # Get continuation state
+        continuation_messages = []
+        response_with_tool_calls = None
+        if hasattr(task, '_continuation_state') and task._continuation_state:
+            continuation_messages = task._continuation_state.get('messages', [])
+            response_with_tool_calls = task._continuation_state.get('response_with_tool_calls')
+        
+        # Clear paused state
         task.is_paused = False
-        task.description += tool_results_prompt
         task._tools_awaiting_external_execution = []
         
         if task.enable_cache:
             task.set_cache_manager(self._cache_manager)
         
-        return await self.do_async(task, model, debug, retry, state, graph_execution_id=graph_execution_id)
+        # Restore agent state from continuation
+        if hasattr(task, '_continuation_state') and task._continuation_state:
+            saved_state = task._continuation_state
+            self._tool_call_count = saved_state.get('tool_call_count', 0)
+            self._tool_limit_reached = saved_state.get('tool_limit_reached', False)
+            self._current_messages = saved_state.get('current_messages', [])
+        
+        # Set current task (needed for pipeline steps)
+        self.current_task = task
+        
+        # Determine model to use
+        if model:
+            from upsonic.models import infer_model
+            current_model = infer_model(model)
+        else:
+            current_model = self.model
+        
+        async with self._managed_storage_connection():
+            # Create a continuation pipeline - SKIP ALL STEPS UNTIL MessageBuildStep
+            # 
+            # The continuation flow:
+            # 1. MessageBuildStep - restores saved messages
+            # 2. ModelExecutionStep - injects response_with_tool_calls + tool_results, calls model
+            # 3. All subsequent steps run normally
+            #
+            # We skip: InitializationStep, StorageConnectionStep, CacheCheckStep, UserPolicyStep,
+            #          LLMManagerStep, ModelSelectionStep, ValidationStep, ToolSetupStep
+            # 
+            # These are already done in the initial run and state is preserved in continuation context
+            
+            pipeline = PipelineManager(
+                steps=[
+                    MessageBuildStep(),  # Restores saved messages
+                    ModelExecutionStep(),  # Injects tool results and continues
+                    ResponseProcessingStep(),
+                    ReflectionStep(),
+                    MemoryMessageTrackingStep(),
+                    CallManagementStep(),
+                    TaskManagementStep(),
+                    ReliabilityStep(),
+                    AgentPolicyStep(),
+                    CacheStorageStep(),
+                    FinalizationStep(),
+                ],
+                debug=debug or self.debug
+            )
+            
+            # Create continuation context with all saved state
+            context = StepContext(
+                task=task,
+                agent=self,
+                model=current_model,
+                state=state,
+                is_continuation=True,  # This is the key flag
+                continuation_messages=continuation_messages,
+                continuation_tool_results=tool_return_parts,
+                continuation_response_with_tool_calls=response_with_tool_calls  # The response that triggered pause
+            )
+            
+            final_context = await pipeline.execute(context)
+            sentry_sdk.flush()
+            
+            return self._run_result.output
+    
+    async def continue_durable_async(
+        self,
+        durable_execution_id: str,
+        storage: Optional[Any] = None,
+        model: Optional[Union[str, "Model"]] = None,
+        debug: bool = False,
+        retry: int = 1
+    ) -> Any:
+        """
+        Continue execution from a durable execution checkpoint asynchronously.
+        
+        This method loads the saved execution state and resumes from the last
+        successful checkpoint. It's used to recover from failures or interruptions.
+        
+        Args:
+            durable_execution_id: The execution ID to resume
+            storage: Storage backend (if different from the original)
+            model: Override model for resumption
+            debug: Enable debug mode
+            retry: Number of retries
+            
+        Returns:
+            The task output
+            
+        Raises:
+            ValueError: If execution ID not found or state is invalid
+            
+        Example:
+            ```python
+            # After an error, resume from checkpoint
+            result = await agent.continue_durable_async(task.durable_execution_id)
+            ```
+        """
+        from upsonic.durable import DurableExecution
+        from upsonic.agent.pipeline import PipelineManager, StepContext
+        
+        # Load the durable execution
+        if storage is None:
+            raise ValueError("Storage backend is required to continue durable execution")
+        
+        durable = await DurableExecution.load_by_id_async(durable_execution_id, storage)
+        if durable is None:
+            raise ValueError(f"Durable execution not found: {durable_execution_id}")
+        
+        checkpoint = await durable.load_checkpoint_async()
+        if checkpoint is None:
+            raise ValueError(f"No checkpoint found for execution: {durable_execution_id}")
+        
+        # Extract state from checkpoint
+        task = checkpoint['task']
+        context_data = checkpoint['context_data']  # Serialized context data
+        step_index = checkpoint['step_index']
+        step_name = checkpoint['step_name']
+        agent_state = checkpoint.get('agent_state', {})
+        
+        from upsonic.utils.printing import info_log, warning_log
+        checkpoint_status = checkpoint.get('status', 'unknown')
+        
+        info_log(
+            f"🔄 RESUMING from checkpoint: {durable_execution_id}",
+            "DurableRecovery"
+        )
+        
+        if self.debug or debug:
+            if checkpoint_status == "failed":
+                info_log(
+                    f"📍 Failed at step: {step_index} ({step_name})",
+                    "DurableRecovery"
+                )
+                info_log(
+                    f"🔄 Will RETRY step: {step_index} ({step_name})",
+                    "DurableRecovery"
+                )
+            else:
+                info_log(
+                    f"📍 Last completed step: {step_index} ({step_name})",
+                    "DurableRecovery"
+                )
+                info_log(
+                    f"⏭️  Will resume from step: {step_index + 1}",
+                    "DurableRecovery"
+                )
+        
+        if agent_state:
+            self._tool_call_count = agent_state.get('tool_call_count', 0)
+            self._tool_limit_reached = agent_state.get('tool_limit_reached', False)
+        
+        if model:
+            from upsonic.models import infer_model
+            current_model = infer_model(model)
+        else:
+            current_model = self.model
+        
+        # Reconstruct context with current agent and model
+        from upsonic.durable.serializer import DurableStateSerializer
+        context = DurableStateSerializer.reconstruct_context(
+            context_data,
+            task=task,
+            agent=self,
+            model=current_model
+        )
+        
+        from upsonic.agent.pipeline import (
+            InitializationStep, CacheCheckStep, UserPolicyStep,
+            StorageConnectionStep, LLMManagerStep, ModelSelectionStep,
+            ValidationStep, ToolSetupStep, MessageBuildStep,
+            ModelExecutionStep, ResponseProcessingStep,
+            ReflectionStep, CallManagementStep, TaskManagementStep,
+            MemoryMessageTrackingStep, ReliabilityStep, AgentPolicyStep,
+            CacheStorageStep, FinalizationStep
+        )
+        
+        all_steps = [
+            InitializationStep(),
+            StorageConnectionStep(),
+            CacheCheckStep(),
+            UserPolicyStep(),
+            LLMManagerStep(),
+            ModelSelectionStep(),
+            ValidationStep(),
+            ToolSetupStep(),
+            MessageBuildStep(),
+            ModelExecutionStep(),
+            ResponseProcessingStep(),
+            ReflectionStep(),
+            MemoryMessageTrackingStep(),
+            AgentPolicyStep(),  # Move before CallManagementStep
+            CallManagementStep(),
+            TaskManagementStep(),
+            ReliabilityStep(),
+            CacheStorageStep(),
+            FinalizationStep(),
+        ]
+        
+        # Determine resume point based on checkpoint status
+        if checkpoint_status == "failed":
+            # Retry the failed step
+            resume_from_index = step_index
+            completed_count = step_index
+        else:
+            # Continue from next step after successful checkpoint
+            resume_from_index = step_index + 1
+            completed_count = resume_from_index
+        
+        remaining_steps = all_steps[resume_from_index:]
+        
+        if self.debug or debug:
+            info_log(
+                f"📋 Total pipeline steps: {len(all_steps)}",
+                "DurableRecovery"
+            )
+            info_log(
+                f"⏳ Remaining to execute: {len(remaining_steps)} steps",
+                "DurableRecovery"
+            )
+            
+        if self.debug or debug:
+            if remaining_steps:
+                step_names = [s.name for s in remaining_steps[:5]]
+                if len(remaining_steps) > 5:
+                    step_names.append(f"... and {len(remaining_steps) - 5} more")
+                info_log(
+                    f"🎯 Steps to execute: {', '.join(step_names)}",
+                    "DurableRecovery"
+                )
+        
+        if not remaining_steps:
+            if self.debug or debug:
+                from upsonic.utils.printing import info_log
+                info_log(
+                    f"Execution {durable_execution_id} was already complete at checkpoint",
+                    "Agent"
+                )
+            return task.response
+        
+        # Create pipeline with remaining steps
+        async with self._managed_storage_connection():
+            pipeline = PipelineManager(
+                steps=remaining_steps,
+                debug=debug or self.debug
+            )
+            
+            final_context = await pipeline.execute(context)
+            sentry_sdk.flush()
+            
+            return self._run_result.output
+    
+    def continue_durable(
+        self,
+        durable_execution_id: str,
+        storage: Optional[Any] = None,
+        model: Optional[Union[str, "Model"]] = None,
+        debug: bool = False,
+        retry: int = 1
+    ) -> Any:
+        """
+        Continue execution from a durable execution checkpoint synchronously.
+        
+        This method loads the saved execution state and resumes from the last
+        successful checkpoint. It's used to recover from failures or interruptions.
+        
+        Args:
+            durable_execution_id: The execution ID to resume
+            storage: Storage backend (if different from the original)
+            model: Override model for resumption
+            debug: Enable debug mode
+            retry: Number of retries
+            
+        Returns:
+            The task output
+            
+        Raises:
+            ValueError: If execution ID not found or state is invalid
+            
+        Example:
+            ```python
+            from upsonic import Agent
+            from upsonic.durable import FileDurableStorage
+            
+            storage = FileDurableStorage("./durable_state")
+            agent = Agent("openai/gpt-4o")
+            
+            # Resume from checkpoint
+            result = agent.continue_durable(
+                durable_execution_id="20250127-abc123",
+                storage=storage
+            )
+            ```
+        """
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run,
+                        self.continue_durable_async(durable_execution_id, storage, model, debug, retry)
+                    )
+                    return future.result()
+            else:
+                return loop.run_until_complete(
+                    self.continue_durable_async(durable_execution_id, storage, model, debug, retry)
+                )
+        except RuntimeError:
+            return asyncio.run(
+                self.continue_durable_async(durable_execution_id, storage, model, debug, retry)
+            )
 
-
-# Legacy alias for backwards compatibility
-Direct = Agent

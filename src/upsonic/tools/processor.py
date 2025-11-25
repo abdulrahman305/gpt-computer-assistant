@@ -15,10 +15,10 @@ from typing import (
 )
 
 from upsonic.tools.base import (
-    Tool, ToolBase, ToolCall, ToolDefinition, ToolKit, ToolResult
+    Tool, ToolCall, ToolDefinition, ToolKit, ToolResult
 )
 from upsonic.tools.config import ToolConfig
-from upsonic.tools.context import ToolContext
+from upsonic.tools.context import ToolMetrics
 from upsonic.tools.schema import (
     FunctionSchema, generate_function_schema, validate_tool_function
 )
@@ -36,9 +36,8 @@ class ToolValidationError(Exception):
 
 class ExternalExecutionPause(Exception):
     """Exception for pausing agent execution for external tool execution."""
-    def __init__(self, tool_call: ToolCall):
-        self.tool_call = tool_call
-        super().__init__(f"Agent paused for external execution of tool: {tool_call.tool_name}")
+    def __init__(self):
+        super().__init__(f"Agent paused for external execution of a tool.")
 
 
 class ToolProcessor:
@@ -46,14 +45,11 @@ class ToolProcessor:
     
     def __init__(self):
         self.registered_tools: Dict[str, Tool] = {}
-        self.tool_definitions: Dict[str, ToolDefinition] = {}
         self.mcp_handlers: List[Any] = []
-        self.current_context: Optional[ToolContext] = None
     
     def process_tools(
         self,
-        tools: List[Any],
-        context: Optional[ToolContext] = None
+        tools: List[Any]
     ) -> Dict[str, Tool]:
         """Process a list of raw tools and return registered Tool instances."""
         processed_tools = {}
@@ -109,6 +105,12 @@ class ToolProcessor:
     
     def _is_mcp_tool(self, tool_item: Any) -> bool:
         """Check if an item is an MCP tool configuration."""
+        # Check for MCPHandler or MultiMCPHandler instances
+        from upsonic.tools.mcp import MCPHandler, MultiMCPHandler
+        if isinstance(tool_item, (MCPHandler, MultiMCPHandler)):
+            return True
+        
+        # Check for legacy config class
         if not inspect.isclass(tool_item):
             return False
         return hasattr(tool_item, 'url') or hasattr(tool_item, 'command')
@@ -126,14 +128,27 @@ class ToolProcessor:
                 builtin_tools.append(tool_item)
         return builtin_tools
     
-    def _process_mcp_tool(self, mcp_config: Type) -> Dict[str, Tool]:
-        """Process MCP tool configuration."""
-        from upsonic.tools.mcp import MCPHandler
+    def _process_mcp_tool(self, mcp_config: Any) -> Dict[str, Tool]:
+        """
+        Process MCP tool configuration.
         
-        handler = MCPHandler(mcp_config)
+        Supports:
+        - Legacy config classes (with url/command attributes)
+        - MCPHandler instances
+        - MultiMCPHandler instances
+        """
+        from upsonic.tools.mcp import MCPHandler, MultiMCPHandler
+        
+        # If already a handler instance, use it directly
+        if isinstance(mcp_config, (MCPHandler, MultiMCPHandler)):
+            handler = mcp_config
+        else:
+            # Legacy config class - create handler
+            handler = MCPHandler(config=mcp_config)
+        
         self.mcp_handlers.append(handler)
         
-        # Get tools from MCP server
+        # Get tools from MCP server(s)
         mcp_tools = handler.get_tools()
         return {tool.name: tool for tool in mcp_tools}
     
@@ -211,8 +226,7 @@ class ToolProcessor:
     
     def create_behavioral_wrapper(
         self,
-        tool: Tool,
-        context: ToolContext
+        tool: Tool
     ) -> Callable:
         """Create a wrapper function with behavioral logic for a tool."""
         # Track if this tool requires sequential execution
@@ -252,11 +266,8 @@ class ToolProcessor:
             
             # External execution
             if config.external_execution:
-                tool_call = ToolCall(
-                    tool_name=tool.name,
-                    args=kwargs
-                )
-                raise ExternalExecutionPause(tool_call)
+                # Don't create ToolCall here - ToolManager will create ExternalToolCall with ID
+                raise ExternalExecutionPause()
             
             # Caching
             cache_key = None
@@ -274,6 +285,7 @@ class ToolProcessor:
             max_retries = config.max_retries
             last_error = None
             result = None
+            execution_success = False
             
             for attempt in range(max_retries + 1):
                 try:
@@ -287,6 +299,7 @@ class ToolProcessor:
                         result = await tool.execute(**kwargs)
                     
                     # Success - break out of retry loop
+                    execution_success = True
                     break
                     
                 except asyncio.TimeoutError as e:
@@ -309,6 +322,9 @@ class ToolProcessor:
                         raise
             
             execution_time = time.time() - start_time
+            
+            # Record execution in tool metrics
+            tool.record_execution(execution_time, execution_success)
             
             # Cache result
             if config.cache_results and cache_key:
@@ -337,8 +353,7 @@ class ToolProcessor:
             
             return func_dict
         
-        return wrapper
-    
+        return wrapper    
     def _get_user_confirmation(self, tool_name: str, args: Dict[str, Any]) -> bool:
         """Get user confirmation for tool execution."""
         from upsonic.utils.printing import console
